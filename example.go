@@ -8,12 +8,6 @@ import (
 )
 
 func main() {
-	// echo server configuration
-	config := map[string]interface{}{
-		"host": "localhost",
-		"port": 8080,
-	}
-
 	// create a daemonizer
 	daemonizer, err := NewDaemonizer()
 	if err != nil {
@@ -23,16 +17,20 @@ func main() {
 	if !daemonizer.IsDaemon() {
 		// parent process
 		// daemonize the process
+
+		// echo server configuration
+		configMap := map[string]interface{}{
+			"host": "localhost",
+			"port": 8080,
+		}
+
 		option := DaemonizeOption{}
 
 		// set emtpy stdio, stdout, stderr
-		err := option.UseNullIO()
-		if err != nil {
-			panic(err)
-		}
+		//option.UseNullIO()
 
 		// pass the echo server config to the daemon process
-		err = daemonizer.Daemonize(config, option)
+		err = daemonizer.Daemonize(configMap, option)
 		if err != nil {
 			panic(err)
 		}
@@ -45,15 +43,17 @@ func main() {
 	}
 
 	// Daemon process
-	startEchoServer(config)
+	// get the echo server config from the parent process
+	configMap := daemonizer.GetParams()
+	startEchoServer(configMap)
 }
 
 func startEchoServer(config map[string]interface{}) {
 	// Extract the host and port from the config.
 	host := config["host"].(string)
-	port := config["port"].(int)
+	port := config["port"].(float64)
 
-	address := fmt.Sprintf("%s:%d", host, port)
+	address := fmt.Sprintf("%s:%d", host, int(port))
 	network := "tcp"
 
 	fmt.Printf("Starting echo server on %s://%s\n", network, address)

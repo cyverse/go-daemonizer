@@ -25,7 +25,7 @@ var (
 )
 
 type daemonProcessInitRequest struct {
-	Param any `json:"param"`
+	Params map[string]interface{} `json:"params"`
 }
 
 type daemonProcessResponse struct {
@@ -36,7 +36,7 @@ type daemonProcessResponse struct {
 type Daemonizer struct {
 	daemon           bool
 	commandArguments []string
-	param            any // must be serializable
+	params           map[string]interface{} // must be serializable
 
 	daemonProc      *os.Process
 	paramReadPipe   *os.File
@@ -121,22 +121,22 @@ func (d *Daemonizer) IsDaemon() bool {
 	return d.daemon
 }
 
-// Daemonize starts the daemon process with the given param.
+// Daemonize starts the daemon process with the given params.
 // called by the parent process
-func (d *Daemonizer) Daemonize(param any, option DaemonizeOption) error {
+func (d *Daemonizer) Daemonize(params map[string]interface{}, option DaemonizeOption) error {
 	if d.daemon {
 		return ErrNotParentProcess
 	}
 
-	// set param
-	d.param = param
+	// set params
+	d.params = params
 
 	err := d.runDaemonProcess(&option)
 	if err != nil {
 		return err
 	}
 
-	err = d.sendParamToDaemonProcess()
+	err = d.sendParamsToDaemonProcess()
 	if err != nil {
 		d.outputReadPipe.Close()
 		return err
@@ -156,8 +156,8 @@ func (d *Daemonizer) Daemonize(param any, option DaemonizeOption) error {
 	return nil
 }
 
-func (d *Daemonizer) GetParam() any {
-	return d.param
+func (d *Daemonizer) GetParams() map[string]interface{} {
+	return d.params
 }
 
 func (d *Daemonizer) GetCommandArguments() []string {
@@ -223,13 +223,13 @@ func (d *Daemonizer) runDaemonProcess(option *DaemonizeOption) error {
 	return nil
 }
 
-// sendParamToDaemonProcess sends the param to the daemon process.
+// sendParamsToDaemonProcess sends the params to the daemon process.
 // called by the parent process
-func (d *Daemonizer) sendParamToDaemonProcess() error {
+func (d *Daemonizer) sendParamsToDaemonProcess() error {
 	defer d.paramWritePipe.Close()
 
 	daemonProcessInitRequest := &daemonProcessInitRequest{
-		Param: d.param,
+		Params: d.params,
 	}
 
 	paramBytes, err := json.Marshal(daemonProcessInitRequest)
@@ -290,7 +290,7 @@ func (d *Daemonizer) initDaemonProcess() error {
 	d.paramReadPipe = os.NewFile(uintptr(3), "paramReadPipe")     // fd 3
 	d.outputWritePipe = os.NewFile(uintptr(4), "outputWritePipe") // fd 4
 
-	err := d.readParamFromParentProcess()
+	err := d.readParamsFromParentProcess()
 	if err != nil {
 		// write error to the parent process
 		d.sendResponseToParentProcess("error", err.Error())
@@ -305,9 +305,9 @@ func (d *Daemonizer) initDaemonProcess() error {
 	return nil
 }
 
-// readOutputFromDaemonProcess reads the output from the daemon process.
+// readParamsFromParentProcess reads the params from the parent process.
 // called by the daemon process
-func (d *Daemonizer) readParamFromParentProcess() error {
+func (d *Daemonizer) readParamsFromParentProcess() error {
 	defer d.paramReadPipe.Close()
 
 	decoder := json.NewDecoder(d.paramReadPipe)
@@ -319,7 +319,7 @@ func (d *Daemonizer) readParamFromParentProcess() error {
 		return err
 	}
 
-	d.param = msg.Param
+	d.params = msg.Params
 	return nil
 }
 

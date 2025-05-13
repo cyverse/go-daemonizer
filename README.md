@@ -22,12 +22,6 @@ This method avoids the complexities of `fork()` in Go's runtime and provides a c
 import "github.com/cyverse/go-daemonizer"
 
 func main() {
-	// echo server configuration
-	config := map[string]interface{}{
-		"host": "localhost",
-		"port": 8080,
-	}
-
 	// create a daemonizer
 	daemonizer, err := NewDaemonizer()
 	if err != nil {
@@ -37,13 +31,22 @@ func main() {
 	if !daemonizer.IsDaemon() {
 		// parent process
 		// daemonize the process
+
+		// echo server configuration
+		configMap := map[string]interface{}{
+			"host": "localhost",
+			"port": 8080, // number type is treated as float64 in json
+		}
+
 		option := DaemonizeOption{}
 
-		// set null stdio, stdout, stderr
-		err := option.UseNullIO()
-		if err != nil {
-			panic(err)
-		}
+		// empty option inherits stdio, stdout, stderr, working dir, environment from parent process
+		
+		// to set null stdio, stdout, stderr, use UseNullIO
+		//err := option.UseNullIO()
+		//if err != nil {
+		//	panic(err)
+		//}
 
 		// pass the echo server config to the daemon process
 		err = daemonizer.Daemonize(config, option)
@@ -59,6 +62,11 @@ func main() {
 	}
 
 	// Daemon process
-	startEchoServer(config)
+	// get the echo server config from the parent process
+	configMap := daemonizer.GetParams()
+	startEchoServer(configMap)
 }
 ```
+
+Checkout [example.go](./example.go) for full example code.
+

@@ -46,26 +46,20 @@ type Daemonizer struct {
 }
 
 type DaemonizeOption struct {
-	Dir    string
-	Stdin  *os.File
-	Stdout *os.File
-	Stderr *os.File
-	Env    []string
+	Dir    string   // if empty, inherit from parent process
+	Stdin  *os.File // if nil, inherit from parent process
+	Stdout *os.File // if nil, inherit from parent process
+	Stderr *os.File // if nil, inherit from parent process
+	Env    []string // if nil, inherit from parent process
 }
 
 func (do *DaemonizeOption) InheritParentIO() {
 	do.Dir = ""
 	do.Env = nil
 
-	if do.Stdin == nil {
-		do.Stdin = os.Stdin
-	}
-	if do.Stdout == nil {
-		do.Stdout = os.Stdout
-	}
-	if do.Stderr == nil {
-		do.Stderr = os.Stderr
-	}
+	do.Stdin = os.Stdin
+	do.Stdout = os.Stdout
+	do.Stderr = os.Stderr
 }
 
 func (do *DaemonizeOption) UseNullIO() error {

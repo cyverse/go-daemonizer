@@ -1,4 +1,4 @@
-package main
+package daemonizer
 
 import (
 	"encoding/json"
@@ -8,7 +8,8 @@ import (
 )
 
 const (
-	DaemonProcessArgument = "--daemon_process"
+	DaemonProcessArgumentName = "daemon_process"
+	DaemonProcessArgument     = "--" + DaemonProcessArgumentName
 )
 
 var (

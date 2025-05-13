@@ -19,11 +19,13 @@ This method avoids the complexities of `fork()` in Go's runtime and provides a c
 
 
 ```go
-import "github.com/cyverse/go-daemonizer"
+import (
+	godaemonizer "github.com/cyverse/go-daemonizer"
+)
 
 func main() {
 	// create a daemonizer
-	daemonizer, err := NewDaemonizer()
+	daemonizer, err := godaemonizer.NewDaemonizer()
 	if err != nil {
 		panic(err)
 	}
@@ -38,7 +40,7 @@ func main() {
 			"port": 8080, // number type is treated as float64 in json
 		}
 
-		option := DaemonizeOption{}
+		option := godaemonizer.DaemonizeOption{}
 
 		// empty option inherits stdio, stdout, stderr, working dir, environment from parent process
 		
@@ -68,5 +70,5 @@ func main() {
 }
 ```
 
-Checkout [example.go](./example.go) for full example code.
+Checkout [example.go](./example/example.go) for full example code.
 

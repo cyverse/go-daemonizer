@@ -5,11 +5,13 @@ import (
 	"io"
 	"net"
 	"os"
+
+	godaemonizer "github.com/cyverse/go-daemonizer"
 )
 
 func main() {
 	// create a daemonizer
-	daemonizer, err := NewDaemonizer()
+	daemonizer, err := godaemonizer.NewDaemonizer()
 	if err != nil {
 		panic(err)
 	}
@@ -24,7 +26,7 @@ func main() {
 			"port": 8080,
 		}
 
-		option := DaemonizeOption{}
+		option := godaemonizer.DaemonizeOption{}
 
 		// set emtpy stdio, stdout, stderr
 		//option.UseNullIO()

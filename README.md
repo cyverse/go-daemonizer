@@ -1,74 +1,107 @@
 # Go-Daemonizer
 
-`Go-Daemonizer` is a library (represented by the `Daemonizer` struct) that allows you to run your Go application as a background daemon process. It achieves this by creating a detached child process using the same application binary and can pass initial configuration to the child via pipes.
+`Go-Daemonizer` is a Go library that runs your application as a background daemon process. It re-executes the same binary as a detached child process, passes configuration via pipes, and reports back whether the daemon started successfully — all without requiring `fork()`.
 
 ## How it Works
 
-When you run an application that uses `Go-Daemonizer`, it performs the following steps:
+1. The parent process calls `Daemonize()` with a JSON-serializable params struct.
+2. `Daemonize()` re-executes the same binary with an internal flag, creating a child process in a new session (`setsid`).
+3. Params are sent to the child via a pipe (fd 3). The child deserializes them into the user-provided struct.
+4. The child performs initialization (e.g., binding a port) and signals readiness (or failure) back to the parent via a status pipe (fd 4).
+5. The parent receives the status and returns — success or error.
+6. The child continues running as a daemon.
 
-1.  The initial process (the **parent**) checks if it is already running as a daemon (using `IsDaemon()`).
-2.  If it's not a daemon, the parent process calls `Daemonize()`.
-3.  `Daemonize()` internally executes the *same* application binary again, creating a new **child** process.
-4.  The `Daemonizer` sets up a pipe to communicate with the child process.
-5.  It passes the provided configuration data to the child via this pipe.
-6.  It detaches the child process from the parent's controlling terminal and environment, making it a true daemon.
-7.  The parent process then exits.
-8.  The child process, upon starting, detects that it *is* the daemonized process (`IsDaemon()` returns true). It receives the configuration via the pipe and continues executing the main application logic in the background.
+This avoids the complexities of `fork()` in Go's multi-threaded runtime and gives the parent reliable feedback on whether the daemon started successfully.
 
-This method avoids the complexities of `fork()` in Go's runtime and provides a clear separation between the initial setup/daemonization phase and the long-running daemon phase.
-
+## Usage
 
 ```go
+package main
+
 import (
+	"context"
+	"fmt"
+	"net"
+	"os"
+
 	godaemonizer "github.com/cyverse/go-daemonizer"
 )
 
+type ServerConfig struct {
+	Host string `json:"host"`
+	Port int    `json:"port"`
+}
+
 func main() {
-	// create a daemonizer
-	daemonizer, err := godaemonizer.NewDaemonizer()
-	if err != nil {
-		panic(err)
-	}
+	d := godaemonizer.New()
 
-	if !daemonizer.IsDaemon() {
-		// parent process
-		// daemonize the process
+	if !d.IsDaemon() {
+		// Parent process
+		cfg := &ServerConfig{Host: "localhost", Port: 8080}
 
-		// echo server configuration
-		configMap := map[string]interface{}{
-			"host": "localhost",
-			"port": 8080, // number type is treated as float64 in json
-		}
-
-		option := godaemonizer.DaemonizeOption{}
-
-		// empty option inherits stdio, stdout, stderr, working dir, environment from parent process
-		
-		// to set null stdio, stdout, stderr, use UseNullIO
-		//err := option.UseNullIO()
-		//if err != nil {
-		//	panic(err)
-		//}
-
-		// pass the echo server config to the daemon process
-		err = daemonizer.Daemonize(config, option)
+		err := d.Daemonize(context.Background(), cfg, nil)
 		if err != nil {
-			panic(err)
+			fmt.Fprintf(os.Stderr, "failed to daemonize: %v\n", err)
+			os.Exit(1)
 		}
 
-		fmt.Println("Daemonized")
-
-		// exit the parent process
-		// daemon process will continue to run
+		fmt.Println("daemon started successfully")
 		return
 	}
 
 	// Daemon process
-	// get the echo server config from the parent process
-	configMap := daemonizer.GetParams()
-	startEchoServer(configMap)
+	var cfg ServerConfig
+	ready, err := d.WaitForParent(&cfg)
+	if err != nil {
+		os.Exit(1)
+	}
+
+	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", cfg.Host, cfg.Port))
+	if err != nil {
+		ready(err) // report failure to parent
+		os.Exit(1)
+	}
+
+	ready(nil) // report success to parent
+
+	// Run server...
+	for {
+		conn, _ := listener.Accept()
+		go func() { /* handle conn */ }()
+	}
 }
 ```
 
-Checkout [example.go](./example/example.go) for full example code.
+## API
 
+### `New() *Daemon`
+
+Creates a new Daemon instance. Detects whether the current process is the parent or the daemon based on an internal command-line flag.
+
+### `(*Daemon) IsDaemon() bool`
+
+Returns true if the current process is the daemon (child) process.
+
+### `(*Daemon) Daemonize(ctx context.Context, params any, cfg *Config) error`
+
+Called by the parent. Launches the daemon process, sends params, and waits for readiness. The `params` value must be JSON-serializable. The `cfg` argument controls the daemon's working directory, environment, and stdio (nil uses sensible defaults).
+
+### `(*Daemon) WaitForParent(dest any) (ready func(error), err error)`
+
+Called by the daemon. Receives params from the parent and deserializes them into `dest` (must be a pointer). Returns a `ready` callback — call `ready(nil)` on success or `ready(err)` on failure to notify the parent.
+
+### `Config`
+
+```go
+type Config struct {
+	Dir    string   // working directory (empty = inherit)
+	Env    []string // environment variables (nil = inherit)
+	Stdin  *os.File // nil = /dev/null
+	Stdout *os.File // nil = /dev/null
+	Stderr *os.File // nil = /dev/null
+}
+```
+
+## Example
+
+See [example/example.go](./example/example.go) for a complete echo server example.
